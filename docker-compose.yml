@@ -1,0 +1,15 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: Data Source=/data/finance-tracker.db
+      Jwt__Issuer: FinanceTracker
+      Jwt__Key: development-only-secret-key-change-me-32chars
+    volumes:
+      - finance-data:/data
+
+volumes:
+  finance-data:

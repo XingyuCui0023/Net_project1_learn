@@ -1,0 +1,12 @@
+bin/
+obj/
+.vs/
+.vscode/
+.idea/
+.dotnet-home/
+.nuget/
+src/FinanceTracker.Api/finance-tracker.db
+src/FinanceTracker.Api/finance-tracker.db-*
+TestResults/
+coverage/
+
