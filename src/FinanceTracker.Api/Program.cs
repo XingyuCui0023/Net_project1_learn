@@ -122,6 +122,17 @@ api.MapGet("/accounts", async (ClaimsPrincipal principal, AppDbContext db, Cance
     return Results.Ok(accounts);
 });
 
+api.MapGet("/accounts/{id:guid}", async (Guid id, ClaimsPrincipal principal, AppDbContext db, CancellationToken cancellationToken) =>
+{
+    var userId = principal.GetUserId();
+    var account = await db.Accounts
+        .Where(item => item.UserId == userId && item.Id == id)
+        .Select(item => new AccountResponse(item.Id, item.Name, item.Type, item.OpeningBalance))
+        .SingleOrDefaultAsync(cancellationToken);
+
+    return account is null ? Results.NotFound() : Results.Ok(account);
+});
+
 api.MapGet("/accounts/{id:guid}/balance", async (Guid id, ClaimsPrincipal principal, AppDbContext db, CancellationToken cancellationToken) =>
 {
     var userId = principal.GetUserId();
@@ -163,6 +174,48 @@ api.MapPost("/accounts", async (AccountRequest request, ClaimsPrincipal principa
     db.Accounts.Add(account);
     await db.SaveChangesAsync(cancellationToken);
     return Results.Created($"/api/accounts/{account.Id}", new AccountResponse(account.Id, account.Name, account.Type, account.OpeningBalance));
+});
+
+api.MapPut("/accounts/{id:guid}", async (Guid id, AccountRequest request, ClaimsPrincipal principal, AppDbContext db, CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Type))
+    {
+        return Results.BadRequest(new { error = "Account name and type are required." });
+    }
+
+    var userId = principal.GetUserId();
+    var account = await db.Accounts.SingleOrDefaultAsync(item => item.UserId == userId && item.Id == id, cancellationToken);
+    if (account is null)
+    {
+        return Results.NotFound();
+    }
+
+    account.Name = request.Name.Trim();
+    account.Type = request.Type.Trim();
+    account.OpeningBalance = request.OpeningBalance;
+    await db.SaveChangesAsync(cancellationToken);
+
+    return Results.Ok(new AccountResponse(account.Id, account.Name, account.Type, account.OpeningBalance));
+});
+
+api.MapDelete("/accounts/{id:guid}", async (Guid id, ClaimsPrincipal principal, AppDbContext db, CancellationToken cancellationToken) =>
+{
+    var userId = principal.GetUserId();
+    var account = await db.Accounts.SingleOrDefaultAsync(item => item.UserId == userId && item.Id == id, cancellationToken);
+    if (account is null)
+    {
+        return Results.NotFound();
+    }
+
+    var hasTransactions = await db.Transactions.AnyAsync(transaction => transaction.UserId == userId && transaction.AccountId == id, cancellationToken);
+    if (hasTransactions)
+    {
+        return Results.Conflict(new { error = "Account has transactions and cannot be deleted." });
+    }
+
+    db.Accounts.Remove(account);
+    await db.SaveChangesAsync(cancellationToken);
+    return Results.NoContent();
 });
 
 api.MapGet("/categories", async (ClaimsPrincipal principal, AppDbContext db, CancellationToken cancellationToken) =>
