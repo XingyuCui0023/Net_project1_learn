@@ -230,6 +230,17 @@ api.MapGet("/categories", async (ClaimsPrincipal principal, AppDbContext db, Can
     return Results.Ok(categories);
 });
 
+api.MapGet("/categories/{id:guid}", async (Guid id, ClaimsPrincipal principal, AppDbContext db, CancellationToken cancellationToken) =>
+{
+    var userId = principal.GetUserId();
+    var category = await db.Categories
+        .Where(item => item.UserId == userId && item.Id == id)
+        .Select(item => new CategoryResponse(item.Id, item.Name, item.Type))
+        .SingleOrDefaultAsync(cancellationToken);
+
+    return category is null ? Results.NotFound() : Results.Ok(category);
+});
+
 api.MapPost("/categories", async (CategoryRequest request, ClaimsPrincipal principal, AppDbContext db, CancellationToken cancellationToken) =>
 {
     if (string.IsNullOrWhiteSpace(request.Name) || !Enum.IsDefined(request.Type))
@@ -241,6 +252,48 @@ api.MapPost("/categories", async (CategoryRequest request, ClaimsPrincipal princ
     db.Categories.Add(category);
     await db.SaveChangesAsync(cancellationToken);
     return Results.Created($"/api/categories/{category.Id}", new CategoryResponse(category.Id, category.Name, category.Type));
+});
+
+api.MapPut("/categories/{id:guid}", async (Guid id, CategoryRequest request, ClaimsPrincipal principal, AppDbContext db, CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Name) || !Enum.IsDefined(request.Type))
+    {
+        return Results.BadRequest(new { error = "Category name and type are required." });
+    }
+
+    var userId = principal.GetUserId();
+    var category = await db.Categories.SingleOrDefaultAsync(item => item.UserId == userId && item.Id == id, cancellationToken);
+    if (category is null)
+    {
+        return Results.NotFound();
+    }
+
+    category.Name = request.Name.Trim();
+    category.Type = request.Type;
+    await db.SaveChangesAsync(cancellationToken);
+
+    return Results.Ok(new CategoryResponse(category.Id, category.Name, category.Type));
+});
+
+api.MapDelete("/categories/{id:guid}", async (Guid id, ClaimsPrincipal principal, AppDbContext db, CancellationToken cancellationToken) =>
+{
+    var userId = principal.GetUserId();
+    var category = await db.Categories.SingleOrDefaultAsync(item => item.UserId == userId && item.Id == id, cancellationToken);
+    if (category is null)
+    {
+        return Results.NotFound();
+    }
+
+    var hasTransactions = await db.Transactions.AnyAsync(transaction => transaction.UserId == userId && transaction.CategoryId == id, cancellationToken);
+    var hasBudgets = await db.Budgets.AnyAsync(budget => budget.UserId == userId && budget.CategoryId == id, cancellationToken);
+    if (hasTransactions || hasBudgets)
+    {
+        return Results.Conflict(new { error = "Category is in use and cannot be deleted." });
+    }
+
+    db.Categories.Remove(category);
+    await db.SaveChangesAsync(cancellationToken);
+    return Results.NoContent();
 });
 
 api.MapGet("/transactions", async (ClaimsPrincipal principal, AppDbContext db, DateOnly? from, DateOnly? to, Guid? accountId, Guid? categoryId, CancellationToken cancellationToken) =>

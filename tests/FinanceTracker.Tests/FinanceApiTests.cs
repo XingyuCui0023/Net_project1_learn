@@ -122,6 +122,51 @@ public sealed class FinanceApiTests
     }
 
     [Fact]
+    public async Task User_can_get_update_and_delete_category_without_usage()
+    {
+        await using var factory = new FinanceTrackerFactory();
+        var client = factory.CreateClient();
+        var token = await RegisterAndGetTokenAsync(client, "category-crud@example.com");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var category = await PostAsync<CategoryResponse>(client, "/api/categories", new CategoryRequest("Snacks", TransactionType.Expense));
+
+        var fetched = await client.GetFromJsonAsync<CategoryResponse>($"/api/categories/{category.Id}", JsonOptions);
+        fetched.Should().NotBeNull();
+        fetched!.Name.Should().Be("Snacks");
+
+        var updateResponse = await client.PutAsJsonAsync($"/api/categories/{category.Id}", new CategoryRequest("Groceries", TransactionType.Expense));
+        var updateContent = await updateResponse.Content.ReadAsStringAsync();
+        updateResponse.IsSuccessStatusCode.Should().BeTrue(updateContent);
+        var updated = JsonSerializer.Deserialize<CategoryResponse>(updateContent, JsonOptions);
+        updated!.Name.Should().Be("Groceries");
+        updated.Type.Should().Be(TransactionType.Expense);
+
+        var deleteResponse = await client.DeleteAsync($"/api/categories/{category.Id}");
+        deleteResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var missingResponse = await client.GetAsync($"/api/categories/{category.Id}");
+        missingResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task User_cannot_delete_category_that_has_transactions()
+    {
+        await using var factory = new FinanceTrackerFactory();
+        var client = factory.CreateClient();
+        var token = await RegisterAndGetTokenAsync(client, "category-delete@example.com");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var account = await PostAsync<AccountResponse>(client, "/api/accounts", new AccountRequest("Cash", "Wallet", 0));
+        var category = await PostAsync<CategoryResponse>(client, "/api/categories", new CategoryRequest("Food", TransactionType.Expense));
+        await PostAsync<TransactionResponse>(client, "/api/transactions", new TransactionRequest(account.Id, category.Id, TransactionType.Expense, 20, "Dinner", new DateOnly(2026, 7, 3)));
+
+        var deleteResponse = await client.DeleteAsync($"/api/categories/{category.Id}");
+
+        deleteResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
     public async Task User_cannot_read_another_users_transaction()
     {
         await using var factory = new FinanceTrackerFactory();
