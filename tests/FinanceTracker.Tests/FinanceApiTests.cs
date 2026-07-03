@@ -53,6 +53,29 @@ public sealed class FinanceApiTests
     }
 
     [Fact]
+    public async Task User_can_read_account_balance()
+    {
+        await using var factory = new FinanceTrackerFactory();
+        var client = factory.CreateClient();
+        var token = await RegisterAndGetTokenAsync(client, "balance@example.com");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var account = await PostAsync<AccountResponse>(client, "/api/accounts", new AccountRequest("Cash", "Wallet", 100));
+        var incomeCategory = await PostAsync<CategoryResponse>(client, "/api/categories", new CategoryRequest("Salary", TransactionType.Income));
+        var expenseCategory = await PostAsync<CategoryResponse>(client, "/api/categories", new CategoryRequest("Food", TransactionType.Expense));
+        await PostAsync<TransactionResponse>(client, "/api/transactions", new TransactionRequest(account.Id, incomeCategory.Id, TransactionType.Income, 1000, "Pay", new DateOnly(2026, 7, 3)));
+        await PostAsync<TransactionResponse>(client, "/api/transactions", new TransactionRequest(account.Id, expenseCategory.Id, TransactionType.Expense, 45.50m, "Lunch", new DateOnly(2026, 7, 3)));
+
+        var balance = await client.GetFromJsonAsync<AccountBalanceResponse>($"/api/accounts/{account.Id}/balance", JsonOptions);
+
+        balance.Should().NotBeNull();
+        balance!.OpeningBalance.Should().Be(100);
+        balance.Income.Should().Be(1000);
+        balance.Expense.Should().Be(45.50m);
+        balance.CurrentBalance.Should().Be(1054.50m);
+    }
+
+    [Fact]
     public async Task User_cannot_read_another_users_transaction()
     {
         await using var factory = new FinanceTrackerFactory();

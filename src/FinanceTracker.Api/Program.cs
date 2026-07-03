@@ -122,6 +122,30 @@ api.MapGet("/accounts", async (ClaimsPrincipal principal, AppDbContext db, Cance
     return Results.Ok(accounts);
 });
 
+api.MapGet("/accounts/{id:guid}/balance", async (Guid id, ClaimsPrincipal principal, AppDbContext db, CancellationToken cancellationToken) =>
+{
+    var userId = principal.GetUserId();
+    var account = await db.Accounts.SingleOrDefaultAsync(item => item.UserId == userId && item.Id == id, cancellationToken);
+    if (account is null)
+    {
+        return Results.NotFound();
+    }
+
+    var transactions = await db.Transactions
+        .Where(transaction => transaction.UserId == userId && transaction.AccountId == id)
+        .ToListAsync(cancellationToken);
+
+    var income = transactions
+        .Where(transaction => transaction.Type == TransactionType.Income)
+        .Sum(transaction => transaction.Amount);
+    var expense = transactions
+        .Where(transaction => transaction.Type == TransactionType.Expense)
+        .Sum(transaction => transaction.Amount);
+    var currentBalance = account.OpeningBalance + income - expense;
+
+    return Results.Ok(new AccountBalanceResponse(account.Id, account.OpeningBalance, income, expense, currentBalance));
+});
+
 api.MapPost("/accounts", async (AccountRequest request, ClaimsPrincipal principal, AppDbContext db, CancellationToken cancellationToken) =>
 {
     if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Type))

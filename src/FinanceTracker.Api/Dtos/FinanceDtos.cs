@@ -8,6 +8,7 @@ public sealed record AuthResponse(Guid UserId, string Email, string Token);
 
 public sealed record AccountRequest(string Name, string Type, decimal OpeningBalance);
 public sealed record AccountResponse(Guid Id, string Name, string Type, decimal OpeningBalance);
+public sealed record AccountBalanceResponse(Guid AccountId, decimal OpeningBalance, decimal Income, decimal Expense, decimal CurrentBalance);
 
 public sealed record CategoryRequest(string Name, TransactionType Type);
 public sealed record CategoryResponse(Guid Id, string Name, TransactionType Type);
