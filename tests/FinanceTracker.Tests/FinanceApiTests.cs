@@ -212,6 +212,51 @@ public sealed class FinanceApiTests
     }
 
     [Fact]
+    public async Task User_cannot_read_another_users_account_category_or_budget()
+    {
+        await using var factory = new FinanceTrackerFactory();
+        var client = factory.CreateClient();
+
+        var firstToken = await RegisterAndGetTokenAsync(client, "owner@example.com");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", firstToken);
+        var account = await PostAsync<AccountResponse>(client, "/api/accounts", new AccountRequest("Owner Cash", "Wallet", 0));
+        var category = await PostAsync<CategoryResponse>(client, "/api/categories", new CategoryRequest("Owner Food", TransactionType.Expense));
+        var budget = await PostAsync<BudgetResponse>(client, "/api/budgets", new BudgetRequest(category.Id, 2026, 7, 100));
+
+        var secondToken = await RegisterAndGetTokenAsync(client, "other@example.com");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", secondToken);
+
+        var accountResponse = await client.GetAsync($"/api/accounts/{account.Id}");
+        var categoryResponse = await client.GetAsync($"/api/categories/{category.Id}");
+        var budgetResponse = await client.GetAsync($"/api/budgets/{budget.Id}");
+
+        accountResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        categoryResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        budgetResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task User_cannot_create_transaction_with_another_users_account_or_category()
+    {
+        await using var factory = new FinanceTrackerFactory();
+        var client = factory.CreateClient();
+
+        var firstToken = await RegisterAndGetTokenAsync(client, "transaction-owner@example.com");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", firstToken);
+        var account = await PostAsync<AccountResponse>(client, "/api/accounts", new AccountRequest("Owner Bank", "Debit", 0));
+        var category = await PostAsync<CategoryResponse>(client, "/api/categories", new CategoryRequest("Owner Salary", TransactionType.Income));
+
+        var secondToken = await RegisterAndGetTokenAsync(client, "transaction-other@example.com");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", secondToken);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/transactions",
+            new TransactionRequest(account.Id, category.Id, TransactionType.Income, 1000, "Pay", new DateOnly(2026, 7, 6)));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
     public async Task User_cannot_read_another_users_transaction()
     {
         await using var factory = new FinanceTrackerFactory();
