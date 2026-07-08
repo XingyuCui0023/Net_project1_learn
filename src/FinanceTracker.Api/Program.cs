@@ -388,19 +388,9 @@ api.MapGet("/budgets", async (ClaimsPrincipal principal, AppDbContext db, int ye
 
 api.MapPost("/budgets", async (BudgetRequest request, ClaimsPrincipal principal, AppDbContext db, CancellationToken cancellationToken) =>
 {
-    if (!IsValidMonth(request.Year, request.Month) || request.LimitAmount <= 0)
-    {
-        return Results.BadRequest(new { error = "Budget month must be valid and limit amount must be greater than zero." });
-    }
-
     var userId = principal.GetUserId();
-    var ownsCategory = await db.Categories.AnyAsync(category =>
-        category.UserId == userId &&
-        category.Id == request.CategoryId &&
-        category.Type == TransactionType.Expense &&
-        !category.IsDeleted,
-        cancellationToken);
-    if (!ownsCategory) return Results.BadRequest(new { error = "Expense category does not exist." });
+    var validation = await ValidateBudgetRequestAsync(request, userId, db, cancellationToken);
+    if (validation is not null) return validation;
 
     var budget = await db.Budgets.SingleOrDefaultAsync(item =>
         item.UserId == userId && item.CategoryId == request.CategoryId && item.Year == request.Year && item.Month == request.Month, cancellationToken);
@@ -416,7 +406,66 @@ api.MapPost("/budgets", async (BudgetRequest request, ClaimsPrincipal principal,
     }
 
     await db.SaveChangesAsync(cancellationToken);
-    return Results.Ok(new BudgetResponse(budget.Id, budget.CategoryId, budget.Year, budget.Month, budget.LimitAmount, 0, false));
+    return Results.Ok(await BuildBudgetResponseAsync(budget, userId, db, cancellationToken));
+});
+
+api.MapGet("/budgets/{id:guid}", async (Guid id, ClaimsPrincipal principal, AppDbContext db, CancellationToken cancellationToken) =>
+{
+    var userId = principal.GetUserId();
+    var budget = await db.Budgets.SingleOrDefaultAsync(item => item.UserId == userId && item.Id == id, cancellationToken);
+    if (budget is null)
+    {
+        return Results.NotFound();
+    }
+
+    return Results.Ok(await BuildBudgetResponseAsync(budget, userId, db, cancellationToken));
+});
+
+api.MapPut("/budgets/{id:guid}", async (Guid id, BudgetRequest request, ClaimsPrincipal principal, AppDbContext db, CancellationToken cancellationToken) =>
+{
+    var userId = principal.GetUserId();
+    var validation = await ValidateBudgetRequestAsync(request, userId, db, cancellationToken);
+    if (validation is not null) return validation;
+
+    var budget = await db.Budgets.SingleOrDefaultAsync(item => item.UserId == userId && item.Id == id, cancellationToken);
+    if (budget is null)
+    {
+        return Results.NotFound();
+    }
+
+    var duplicateExists = await db.Budgets.AnyAsync(item =>
+        item.UserId == userId &&
+        item.Id != id &&
+        item.CategoryId == request.CategoryId &&
+        item.Year == request.Year &&
+        item.Month == request.Month,
+        cancellationToken);
+    if (duplicateExists)
+    {
+        return Results.Conflict(new { error = "Budget already exists for this category and month." });
+    }
+
+    budget.CategoryId = request.CategoryId;
+    budget.Year = request.Year;
+    budget.Month = request.Month;
+    budget.LimitAmount = request.LimitAmount;
+    await db.SaveChangesAsync(cancellationToken);
+
+    return Results.Ok(await BuildBudgetResponseAsync(budget, userId, db, cancellationToken));
+});
+
+api.MapDelete("/budgets/{id:guid}", async (Guid id, ClaimsPrincipal principal, AppDbContext db, CancellationToken cancellationToken) =>
+{
+    var userId = principal.GetUserId();
+    var budget = await db.Budgets.SingleOrDefaultAsync(item => item.UserId == userId && item.Id == id, cancellationToken);
+    if (budget is null)
+    {
+        return Results.NotFound();
+    }
+
+    db.Budgets.Remove(budget);
+    await db.SaveChangesAsync(cancellationToken);
+    return Results.NoContent();
 });
 
 api.MapGet("/reports/monthly", async (ClaimsPrincipal principal, ReportService reportService, int year, int month, CancellationToken cancellationToken) =>
@@ -451,6 +500,43 @@ static async Task<IResult?> ValidateTransactionRequestAsync(TransactionRequest r
     }
 
     return null;
+}
+
+static async Task<IResult?> ValidateBudgetRequestAsync(BudgetRequest request, Guid userId, AppDbContext db, CancellationToken cancellationToken)
+{
+    if (!IsValidMonth(request.Year, request.Month) || request.LimitAmount <= 0)
+    {
+        return Results.BadRequest(new { error = "Budget month must be valid and limit amount must be greater than zero." });
+    }
+
+    var ownsCategory = await db.Categories.AnyAsync(category =>
+        category.UserId == userId &&
+        category.Id == request.CategoryId &&
+        category.Type == TransactionType.Expense &&
+        !category.IsDeleted,
+        cancellationToken);
+    if (!ownsCategory)
+    {
+        return Results.BadRequest(new { error = "Expense category does not exist." });
+    }
+
+    return null;
+}
+
+static async Task<BudgetResponse> BuildBudgetResponseAsync(Budget budget, Guid userId, AppDbContext db, CancellationToken cancellationToken)
+{
+    var start = new DateOnly(budget.Year, budget.Month, 1);
+    var end = start.AddMonths(1);
+    var spent = await db.Transactions
+        .Where(transaction =>
+            transaction.UserId == userId &&
+            transaction.CategoryId == budget.CategoryId &&
+            transaction.Type == TransactionType.Expense &&
+            transaction.OccurredOn >= start &&
+            transaction.OccurredOn < end)
+        .SumAsync(transaction => transaction.Amount, cancellationToken);
+
+    return new BudgetResponse(budget.Id, budget.CategoryId, budget.Year, budget.Month, budget.LimitAmount, spent, spent > budget.LimitAmount);
 }
 
 static bool IsValidMonth(int year, int month) => year is >= 2000 and <= 2100 && month is >= 1 and <= 12;

@@ -179,6 +179,39 @@ public sealed class FinanceApiTests
     }
 
     [Fact]
+    public async Task User_can_get_update_and_delete_budget()
+    {
+        await using var factory = new FinanceTrackerFactory();
+        var client = factory.CreateClient();
+        var token = await RegisterAndGetTokenAsync(client, "budget-crud@example.com");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var account = await PostAsync<AccountResponse>(client, "/api/accounts", new AccountRequest("Cash", "Wallet", 0));
+        var category = await PostAsync<CategoryResponse>(client, "/api/categories", new CategoryRequest("Food", TransactionType.Expense));
+        await PostAsync<TransactionResponse>(client, "/api/transactions", new TransactionRequest(account.Id, category.Id, TransactionType.Expense, 30, "Dinner", new DateOnly(2026, 7, 5)));
+        var budget = await PostAsync<BudgetResponse>(client, "/api/budgets", new BudgetRequest(category.Id, 2026, 7, 50));
+
+        var fetched = await client.GetFromJsonAsync<BudgetResponse>($"/api/budgets/{budget.Id}", JsonOptions);
+        fetched.Should().NotBeNull();
+        fetched!.SpentAmount.Should().Be(30);
+        fetched.IsOverBudget.Should().BeFalse();
+
+        var updateResponse = await client.PutAsJsonAsync($"/api/budgets/{budget.Id}", new BudgetRequest(category.Id, 2026, 7, 20));
+        var updateContent = await updateResponse.Content.ReadAsStringAsync();
+        updateResponse.IsSuccessStatusCode.Should().BeTrue(updateContent);
+        var updated = JsonSerializer.Deserialize<BudgetResponse>(updateContent, JsonOptions);
+        updated!.LimitAmount.Should().Be(20);
+        updated.SpentAmount.Should().Be(30);
+        updated.IsOverBudget.Should().BeTrue();
+
+        var deleteResponse = await client.DeleteAsync($"/api/budgets/{budget.Id}");
+        deleteResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var missingResponse = await client.GetAsync($"/api/budgets/{budget.Id}");
+        missingResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
     public async Task User_cannot_read_another_users_transaction()
     {
         await using var factory = new FinanceTrackerFactory();
