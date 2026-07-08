@@ -222,7 +222,7 @@ api.MapGet("/categories", async (ClaimsPrincipal principal, AppDbContext db, Can
 {
     var userId = principal.GetUserId();
     var categories = await db.Categories
-        .Where(category => category.UserId == userId)
+        .Where(category => category.UserId == userId && !category.IsDeleted)
         .OrderBy(category => category.Type)
         .ThenBy(category => category.Name)
         .Select(category => new CategoryResponse(category.Id, category.Name, category.Type))
@@ -234,7 +234,7 @@ api.MapGet("/categories/{id:guid}", async (Guid id, ClaimsPrincipal principal, A
 {
     var userId = principal.GetUserId();
     var category = await db.Categories
-        .Where(item => item.UserId == userId && item.Id == id)
+        .Where(item => item.UserId == userId && item.Id == id && !item.IsDeleted)
         .Select(item => new CategoryResponse(item.Id, item.Name, item.Type))
         .SingleOrDefaultAsync(cancellationToken);
 
@@ -262,7 +262,7 @@ api.MapPut("/categories/{id:guid}", async (Guid id, CategoryRequest request, Cla
     }
 
     var userId = principal.GetUserId();
-    var category = await db.Categories.SingleOrDefaultAsync(item => item.UserId == userId && item.Id == id, cancellationToken);
+    var category = await db.Categories.SingleOrDefaultAsync(item => item.UserId == userId && item.Id == id && !item.IsDeleted, cancellationToken);
     if (category is null)
     {
         return Results.NotFound();
@@ -278,20 +278,13 @@ api.MapPut("/categories/{id:guid}", async (Guid id, CategoryRequest request, Cla
 api.MapDelete("/categories/{id:guid}", async (Guid id, ClaimsPrincipal principal, AppDbContext db, CancellationToken cancellationToken) =>
 {
     var userId = principal.GetUserId();
-    var category = await db.Categories.SingleOrDefaultAsync(item => item.UserId == userId && item.Id == id, cancellationToken);
+    var category = await db.Categories.SingleOrDefaultAsync(item => item.UserId == userId && item.Id == id && !item.IsDeleted, cancellationToken);
     if (category is null)
     {
         return Results.NotFound();
     }
 
-    var hasTransactions = await db.Transactions.AnyAsync(transaction => transaction.UserId == userId && transaction.CategoryId == id, cancellationToken);
-    var hasBudgets = await db.Budgets.AnyAsync(budget => budget.UserId == userId && budget.CategoryId == id, cancellationToken);
-    if (hasTransactions || hasBudgets)
-    {
-        return Results.Conflict(new { error = "Category is in use and cannot be deleted." });
-    }
-
-    db.Categories.Remove(category);
+    category.IsDeleted = true;
     await db.SaveChangesAsync(cancellationToken);
     return Results.NoContent();
 });
@@ -401,7 +394,12 @@ api.MapPost("/budgets", async (BudgetRequest request, ClaimsPrincipal principal,
     }
 
     var userId = principal.GetUserId();
-    var ownsCategory = await db.Categories.AnyAsync(category => category.UserId == userId && category.Id == request.CategoryId && category.Type == TransactionType.Expense, cancellationToken);
+    var ownsCategory = await db.Categories.AnyAsync(category =>
+        category.UserId == userId &&
+        category.Id == request.CategoryId &&
+        category.Type == TransactionType.Expense &&
+        !category.IsDeleted,
+        cancellationToken);
     if (!ownsCategory) return Results.BadRequest(new { error = "Expense category does not exist." });
 
     var budget = await db.Budgets.SingleOrDefaultAsync(item =>
@@ -437,7 +435,11 @@ static async Task<IResult?> ValidateTransactionRequestAsync(TransactionRequest r
     }
 
     var ownsAccount = await db.Accounts.AnyAsync(account => account.UserId == userId && account.Id == request.AccountId, cancellationToken);
-    var category = await db.Categories.SingleOrDefaultAsync(item => item.UserId == userId && item.Id == request.CategoryId, cancellationToken);
+    var category = await db.Categories.SingleOrDefaultAsync(item =>
+        item.UserId == userId &&
+        item.Id == request.CategoryId &&
+        !item.IsDeleted,
+        cancellationToken);
     if (!ownsAccount || category is null)
     {
         return Results.BadRequest(new { error = "Account or category does not exist." });

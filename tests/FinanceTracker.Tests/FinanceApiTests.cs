@@ -150,7 +150,7 @@ public sealed class FinanceApiTests
     }
 
     [Fact]
-    public async Task User_cannot_delete_category_that_has_transactions()
+    public async Task User_can_soft_delete_category_that_has_transactions()
     {
         await using var factory = new FinanceTrackerFactory();
         var client = factory.CreateClient();
@@ -163,7 +163,19 @@ public sealed class FinanceApiTests
 
         var deleteResponse = await client.DeleteAsync($"/api/categories/{category.Id}");
 
-        deleteResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        deleteResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var missingResponse = await client.GetAsync($"/api/categories/{category.Id}");
+        missingResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+        var transactions = await client.GetFromJsonAsync<List<TransactionResponse>>($"/api/transactions?categoryId={category.Id}", JsonOptions);
+        transactions.Should().NotBeNull();
+        transactions.Should().HaveCount(1);
+
+        var newTransactionResponse = await client.PostAsJsonAsync(
+            "/api/transactions",
+            new TransactionRequest(account.Id, category.Id, TransactionType.Expense, 8, "Snack", new DateOnly(2026, 7, 4)));
+        newTransactionResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
     [Fact]

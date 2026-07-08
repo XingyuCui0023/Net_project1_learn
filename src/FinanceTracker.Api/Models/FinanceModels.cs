@@ -30,6 +30,7 @@ public sealed class Category
     public Guid UserId { get; set; }
     public required string Name { get; set; }
     public TransactionType Type { get; set; }
+    public bool IsDeleted { get; set; }
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 }
 
