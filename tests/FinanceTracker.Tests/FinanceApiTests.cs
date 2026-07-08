@@ -31,6 +31,21 @@ public sealed class FinanceApiTests
     }
 
     [Fact]
+    public async Task Error_response_has_consistent_shape()
+    {
+        await using var factory = new FinanceTrackerFactory();
+        var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/api/auth/register", new RegisterRequest("bad", "short"));
+        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>(JsonOptions);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        error.Should().NotBeNull();
+        error!.Code.Should().Be("invalid_auth_request");
+        error.Message.Should().Be("Email must be valid and password must be at least 8 characters.");
+    }
+
+    [Fact]
     public async Task User_can_register_login_create_transaction_and_read_monthly_report()
     {
         await using var factory = new FinanceTrackerFactory();

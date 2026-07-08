@@ -83,12 +83,12 @@ auth.MapPost("/register", async (RegisterRequest request, AppDbContext db, Passw
     var email = request.Email.Trim().ToLowerInvariant();
     if (email.Length < 5 || !email.Contains('@') || request.Password.Length < 8)
     {
-        return Results.BadRequest(new { error = "Email must be valid and password must be at least 8 characters." });
+        return BadRequest("invalid_auth_request", "Email must be valid and password must be at least 8 characters.");
     }
 
     if (await db.Users.AnyAsync(user => user.Email == email, cancellationToken))
     {
-        return Results.Conflict(new { error = "Email is already registered." });
+        return Conflict("duplicate_email", "Email is already registered.");
     }
 
     var user = new User { Email = email, PasswordHash = passwordHasher.Hash(request.Password) };
@@ -161,7 +161,7 @@ api.MapPost("/accounts", async (AccountRequest request, ClaimsPrincipal principa
 {
     if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Type))
     {
-        return Results.BadRequest(new { error = "Account name and type are required." });
+        return BadRequest("invalid_account", "Account name and type are required.");
     }
 
     var account = new Account
@@ -180,7 +180,7 @@ api.MapPut("/accounts/{id:guid}", async (Guid id, AccountRequest request, Claims
 {
     if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Type))
     {
-        return Results.BadRequest(new { error = "Account name and type are required." });
+        return BadRequest("invalid_account", "Account name and type are required.");
     }
 
     var userId = principal.GetUserId();
@@ -210,7 +210,7 @@ api.MapDelete("/accounts/{id:guid}", async (Guid id, ClaimsPrincipal principal, 
     var hasTransactions = await db.Transactions.AnyAsync(transaction => transaction.UserId == userId && transaction.AccountId == id, cancellationToken);
     if (hasTransactions)
     {
-        return Results.Conflict(new { error = "Account has transactions and cannot be deleted." });
+        return Conflict("account_in_use", "Account has transactions and cannot be deleted.");
     }
 
     db.Accounts.Remove(account);
@@ -245,7 +245,7 @@ api.MapPost("/categories", async (CategoryRequest request, ClaimsPrincipal princ
 {
     if (string.IsNullOrWhiteSpace(request.Name) || !Enum.IsDefined(request.Type))
     {
-        return Results.BadRequest(new { error = "Category name and type are required." });
+        return BadRequest("invalid_category", "Category name and type are required.");
     }
 
     var category = new Category { UserId = principal.GetUserId(), Name = request.Name.Trim(), Type = request.Type };
@@ -258,7 +258,7 @@ api.MapPut("/categories/{id:guid}", async (Guid id, CategoryRequest request, Cla
 {
     if (string.IsNullOrWhiteSpace(request.Name) || !Enum.IsDefined(request.Type))
     {
-        return Results.BadRequest(new { error = "Category name and type are required." });
+        return BadRequest("invalid_category", "Category name and type are required.");
     }
 
     var userId = principal.GetUserId();
@@ -369,7 +369,7 @@ api.MapDelete("/transactions/{id:guid}", async (Guid id, ClaimsPrincipal princip
 
 api.MapGet("/budgets", async (ClaimsPrincipal principal, AppDbContext db, int year, int month, CancellationToken cancellationToken) =>
 {
-    if (!IsValidMonth(year, month)) return Results.BadRequest(new { error = "Year and month are invalid." });
+    if (!IsValidMonth(year, month)) return BadRequest("invalid_month", "Year and month are invalid.");
 
     var userId = principal.GetUserId();
     var start = new DateOnly(year, month, 1);
@@ -442,7 +442,7 @@ api.MapPut("/budgets/{id:guid}", async (Guid id, BudgetRequest request, ClaimsPr
         cancellationToken);
     if (duplicateExists)
     {
-        return Results.Conflict(new { error = "Budget already exists for this category and month." });
+        return Conflict("duplicate_budget", "Budget already exists for this category and month.");
     }
 
     budget.CategoryId = request.CategoryId;
@@ -470,7 +470,7 @@ api.MapDelete("/budgets/{id:guid}", async (Guid id, ClaimsPrincipal principal, A
 
 api.MapGet("/reports/monthly", async (ClaimsPrincipal principal, ReportService reportService, int year, int month, CancellationToken cancellationToken) =>
 {
-    if (!IsValidMonth(year, month)) return Results.BadRequest(new { error = "Year and month are invalid." });
+    if (!IsValidMonth(year, month)) return BadRequest("invalid_month", "Year and month are invalid.");
     return Results.Ok(await reportService.GetMonthlyReportAsync(principal.GetUserId(), year, month, cancellationToken));
 });
 
@@ -480,7 +480,7 @@ static async Task<IResult?> ValidateTransactionRequestAsync(TransactionRequest r
 {
     if (request.Amount <= 0 || !Enum.IsDefined(request.Type))
     {
-        return Results.BadRequest(new { error = "Amount must be greater than zero and type must be valid." });
+        return BadRequest("invalid_transaction", "Amount must be greater than zero and type must be valid.");
     }
 
     var ownsAccount = await db.Accounts.AnyAsync(account => account.UserId == userId && account.Id == request.AccountId, cancellationToken);
@@ -491,12 +491,12 @@ static async Task<IResult?> ValidateTransactionRequestAsync(TransactionRequest r
         cancellationToken);
     if (!ownsAccount || category is null)
     {
-        return Results.BadRequest(new { error = "Account or category does not exist." });
+        return BadRequest("invalid_transaction_reference", "Account or category does not exist.");
     }
 
     if (category.Type != request.Type)
     {
-        return Results.BadRequest(new { error = "Transaction type must match category type." });
+        return BadRequest("transaction_type_mismatch", "Transaction type must match category type.");
     }
 
     return null;
@@ -506,7 +506,7 @@ static async Task<IResult?> ValidateBudgetRequestAsync(BudgetRequest request, Gu
 {
     if (!IsValidMonth(request.Year, request.Month) || request.LimitAmount <= 0)
     {
-        return Results.BadRequest(new { error = "Budget month must be valid and limit amount must be greater than zero." });
+        return BadRequest("invalid_budget", "Budget month must be valid and limit amount must be greater than zero.");
     }
 
     var ownsCategory = await db.Categories.AnyAsync(category =>
@@ -517,7 +517,7 @@ static async Task<IResult?> ValidateBudgetRequestAsync(BudgetRequest request, Gu
         cancellationToken);
     if (!ownsCategory)
     {
-        return Results.BadRequest(new { error = "Expense category does not exist." });
+        return BadRequest("invalid_budget_category", "Expense category does not exist.");
     }
 
     return null;
@@ -538,6 +538,10 @@ static async Task<BudgetResponse> BuildBudgetResponseAsync(Budget budget, Guid u
 
     return new BudgetResponse(budget.Id, budget.CategoryId, budget.Year, budget.Month, budget.LimitAmount, spent, spent > budget.LimitAmount);
 }
+
+static IResult BadRequest(string code, string message) => Results.BadRequest(new ErrorResponse(code, message));
+
+static IResult Conflict(string code, string message) => Results.Conflict(new ErrorResponse(code, message));
 
 static bool IsValidMonth(int year, int month) => year is >= 2000 and <= 2100 && month is >= 1 and <= 12;
 
