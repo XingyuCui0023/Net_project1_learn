@@ -5,6 +5,7 @@ using System.Text.Json;
 using FinanceTracker.Api.Data;
 using FinanceTracker.Api.Dtos;
 using FinanceTracker.Api.Models;
+using FinanceTracker.Api.Services;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -43,6 +44,25 @@ public sealed class FinanceApiTests
         error.Should().NotBeNull();
         error!.Code.Should().Be("invalid_auth_request");
         error.Message.Should().Be("Email must be valid and password must be at least 8 characters.");
+    }
+
+    [Fact]
+    public async Task Development_data_seeder_creates_demo_data_once()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var db = new AppDbContext(options);
+        var seeder = new DevelopmentDataSeeder(db, new PasswordHasher());
+
+        await seeder.SeedAsync();
+        await seeder.SeedAsync();
+
+        db.Users.Should().ContainSingle(user => user.Email == DevelopmentDataSeeder.DemoEmail);
+        db.Accounts.Should().HaveCount(2);
+        db.Categories.Should().HaveCount(3);
+        db.Transactions.Should().HaveCount(3);
+        db.Budgets.Should().HaveCount(2);
     }
 
     [Fact]

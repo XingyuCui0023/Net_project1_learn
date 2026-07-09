@@ -35,6 +35,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddSingleton<PasswordHasher>();
 builder.Services.AddSingleton<JwtTokenService>();
 builder.Services.AddScoped<ReportService>();
+builder.Services.AddScoped<DevelopmentDataSeeder>();
 
 var jwtKey = builder.Configuration["Jwt:Key"] ?? "development-only-secret-key-change-me-32chars";
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "FinanceTracker";
@@ -67,6 +68,12 @@ using (var scope = app.Services.CreateScope())
     else
     {
         db.Database.Migrate();
+    }
+
+    if (app.Environment.IsDevelopment())
+    {
+        var seeder = scope.ServiceProvider.GetRequiredService<DevelopmentDataSeeder>();
+        await seeder.SeedAsync();
     }
 }
 
