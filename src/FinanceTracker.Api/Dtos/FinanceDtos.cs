@@ -6,6 +6,7 @@ public sealed record RegisterRequest(string Email, string Password);
 public sealed record LoginRequest(string Email, string Password);
 public sealed record AuthResponse(Guid UserId, string Email, string Token);
 public sealed record ErrorResponse(string Code, string Message);
+public sealed record PagedResponse<T>(IReadOnlyList<T> Items, int Page, int PageSize, int TotalCount, int TotalPages);
 
 public sealed record AccountRequest(string Name, string Type, decimal OpeningBalance);
 public sealed record AccountResponse(Guid Id, string Name, string Type, decimal OpeningBalance);

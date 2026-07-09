@@ -203,14 +203,39 @@ public sealed class FinanceApiTests
         var missingResponse = await client.GetAsync($"/api/categories/{category.Id}");
         missingResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
 
-        var transactions = await client.GetFromJsonAsync<List<TransactionResponse>>($"/api/transactions?categoryId={category.Id}", JsonOptions);
+        var transactions = await client.GetFromJsonAsync<PagedResponse<TransactionResponse>>($"/api/transactions?categoryId={category.Id}", JsonOptions);
         transactions.Should().NotBeNull();
-        transactions.Should().HaveCount(1);
+        transactions!.Items.Should().HaveCount(1);
 
         var newTransactionResponse = await client.PostAsJsonAsync(
             "/api/transactions",
             new TransactionRequest(account.Id, category.Id, TransactionType.Expense, 8, "Snack", new DateOnly(2026, 7, 4)));
         newTransactionResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task User_can_page_transactions()
+    {
+        await using var factory = new FinanceTrackerFactory();
+        var client = factory.CreateClient();
+        var token = await RegisterAndGetTokenAsync(client, "transaction-page@example.com");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var account = await PostAsync<AccountResponse>(client, "/api/accounts", new AccountRequest("Cash", "Wallet", 0));
+        var category = await PostAsync<CategoryResponse>(client, "/api/categories", new CategoryRequest("Food", TransactionType.Expense));
+        await PostAsync<TransactionResponse>(client, "/api/transactions", new TransactionRequest(account.Id, category.Id, TransactionType.Expense, 10, "First", new DateOnly(2026, 7, 1)));
+        await PostAsync<TransactionResponse>(client, "/api/transactions", new TransactionRequest(account.Id, category.Id, TransactionType.Expense, 20, "Second", new DateOnly(2026, 7, 2)));
+        await PostAsync<TransactionResponse>(client, "/api/transactions", new TransactionRequest(account.Id, category.Id, TransactionType.Expense, 30, "Third", new DateOnly(2026, 7, 3)));
+
+        var page = await client.GetFromJsonAsync<PagedResponse<TransactionResponse>>("/api/transactions?page=2&pageSize=2", JsonOptions);
+
+        page.Should().NotBeNull();
+        page!.Page.Should().Be(2);
+        page.PageSize.Should().Be(2);
+        page.TotalCount.Should().Be(3);
+        page.TotalPages.Should().Be(2);
+        page.Items.Should().HaveCount(1);
+        page.Items[0].Note.Should().Be("First");
     }
 
     [Fact]

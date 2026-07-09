@@ -303,8 +303,13 @@ api.MapDelete("/categories/{id:guid}", async (Guid id, ClaimsPrincipal principal
     return Results.NoContent();
 });
 
-api.MapGet("/transactions", async (ClaimsPrincipal principal, AppDbContext db, DateOnly? from, DateOnly? to, Guid? accountId, Guid? categoryId, CancellationToken cancellationToken) =>
+api.MapGet("/transactions", async (ClaimsPrincipal principal, AppDbContext db, DateOnly? from, DateOnly? to, Guid? accountId, Guid? categoryId, CancellationToken cancellationToken, int page = 1, int pageSize = 20) =>
 {
+    if (page <= 0 || pageSize <= 0 || pageSize > 100)
+    {
+        return BadRequest("invalid_pagination", "Page must be greater than zero and page size must be between 1 and 100.");
+    }
+
     var userId = principal.GetUserId();
     var query = db.Transactions.Where(transaction => transaction.UserId == userId);
     if (from is not null) query = query.Where(transaction => transaction.OccurredOn >= from.Value);
@@ -312,11 +317,16 @@ api.MapGet("/transactions", async (ClaimsPrincipal principal, AppDbContext db, D
     if (accountId is not null) query = query.Where(transaction => transaction.AccountId == accountId.Value);
     if (categoryId is not null) query = query.Where(transaction => transaction.CategoryId == categoryId.Value);
 
+    var totalCount = await query.CountAsync(cancellationToken);
+    var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
     var transactions = await query
         .OrderByDescending(transaction => transaction.OccurredOn)
+        .ThenByDescending(transaction => transaction.Id)
+        .Skip((page - 1) * pageSize)
+        .Take(pageSize)
         .Select(transaction => new TransactionResponse(transaction.Id, transaction.AccountId, transaction.CategoryId, transaction.Type, transaction.Amount, transaction.Note, transaction.OccurredOn))
         .ToListAsync(cancellationToken);
-    return Results.Ok(transactions);
+    return Results.Ok(new PagedResponse<TransactionResponse>(transactions, page, pageSize, totalCount, totalPages));
 });
 
 api.MapGet("/transactions/{id:guid}", async (Guid id, ClaimsPrincipal principal, AppDbContext db, CancellationToken cancellationToken) =>

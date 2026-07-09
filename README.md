@@ -198,6 +198,13 @@ Content-Type: application/json
 }
 ```
 
+Query transactions with pagination:
+
+```http
+GET /api/transactions?page=1&pageSize=20
+Authorization: Bearer <token>
+```
+
 查询月度报表：
 
 ```http
