@@ -1,5 +1,6 @@
 services:
   api:
+    container_name: finance-tracker-api
     build: .
     ports:
       - "8080:8080"
@@ -10,6 +11,7 @@ services:
       Jwt__Key: development-only-secret-key-change-me-32chars
     volumes:
       - finance-data:/data
+    restart: unless-stopped
 
 volumes:
   finance-data:

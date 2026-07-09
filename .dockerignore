@@ -1,0 +1,17 @@
+.git
+.github
+.agents
+.dotnet-home
+.nuget
+bin
+obj
+**/bin
+**/obj
+**/.vs
+**/.vscode
+**/.idea
+**/TestResults
+**/coverage
+**/*.db
+**/*.db-*
+README.md
