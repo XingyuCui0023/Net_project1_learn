@@ -318,26 +318,11 @@ api.MapGet("/transactions", async (ClaimsPrincipal principal, AppDbContext db, D
     }
 
     var userId = principal.GetUserId();
-    var query = db.Transactions.Where(transaction => transaction.UserId == userId);
-    if (from is not null) query = query.Where(transaction => transaction.OccurredOn >= from.Value);
-    if (to is not null) query = query.Where(transaction => transaction.OccurredOn <= to.Value);
-    if (accountId is not null) query = query.Where(transaction => transaction.AccountId == accountId.Value);
-    if (categoryId is not null) query = query.Where(transaction => transaction.CategoryId == categoryId.Value);
-    if (!string.IsNullOrWhiteSpace(keyword))
-    {
-        var keywordValue = keyword.Trim();
-        query = query.Where(transaction => transaction.Note != null && transaction.Note.Contains(keywordValue));
-    }
+    var query = ApplyTransactionFilters(db.Transactions, userId, from, to, accountId, categoryId, keyword);
 
     var totalCount = await query.CountAsync(cancellationToken);
     var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
-    var orderedQuery = (sortByValue, sortDirectionValue) switch
-    {
-        ("amount", "asc") => query.OrderBy(transaction => transaction.Amount).ThenByDescending(transaction => transaction.Id),
-        ("amount", "desc") => query.OrderByDescending(transaction => transaction.Amount).ThenByDescending(transaction => transaction.Id),
-        ("occurredon", "asc") => query.OrderBy(transaction => transaction.OccurredOn).ThenByDescending(transaction => transaction.Id),
-        _ => query.OrderByDescending(transaction => transaction.OccurredOn).ThenByDescending(transaction => transaction.Id)
-    };
+    var orderedQuery = ApplyTransactionSorting(query, sortByValue, sortDirectionValue);
 
     var transactions = await orderedQuery
         .Skip((page - 1) * pageSize)
@@ -517,6 +502,38 @@ api.MapGet("/reports/monthly", async (ClaimsPrincipal principal, ReportService r
 });
 
 app.Run();
+
+static IQueryable<Transaction> ApplyTransactionFilters(
+    IQueryable<Transaction> query,
+    Guid userId,
+    DateOnly? from,
+    DateOnly? to,
+    Guid? accountId,
+    Guid? categoryId,
+    string? keyword)
+{
+    query = query.Where(transaction => transaction.UserId == userId);
+    if (from is not null) query = query.Where(transaction => transaction.OccurredOn >= from.Value);
+    if (to is not null) query = query.Where(transaction => transaction.OccurredOn <= to.Value);
+    if (accountId is not null) query = query.Where(transaction => transaction.AccountId == accountId.Value);
+    if (categoryId is not null) query = query.Where(transaction => transaction.CategoryId == categoryId.Value);
+    if (!string.IsNullOrWhiteSpace(keyword))
+    {
+        var keywordValue = keyword.Trim();
+        query = query.Where(transaction => transaction.Note != null && transaction.Note.Contains(keywordValue));
+    }
+
+    return query;
+}
+
+static IOrderedQueryable<Transaction> ApplyTransactionSorting(IQueryable<Transaction> query, string sortByValue, string sortDirectionValue) =>
+    (sortByValue, sortDirectionValue) switch
+    {
+        ("amount", "asc") => query.OrderBy(transaction => transaction.Amount).ThenByDescending(transaction => transaction.Id),
+        ("amount", "desc") => query.OrderByDescending(transaction => transaction.Amount).ThenByDescending(transaction => transaction.Id),
+        ("occurredon", "asc") => query.OrderBy(transaction => transaction.OccurredOn).ThenByDescending(transaction => transaction.Id),
+        _ => query.OrderByDescending(transaction => transaction.OccurredOn).ThenByDescending(transaction => transaction.Id)
+    };
 
 static async Task<IResult?> ValidateTransactionRequestAsync(TransactionRequest request, Guid userId, AppDbContext db, CancellationToken cancellationToken)
 {
