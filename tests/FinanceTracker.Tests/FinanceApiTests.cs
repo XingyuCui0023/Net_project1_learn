@@ -239,6 +239,26 @@ public sealed class FinanceApiTests
     }
 
     [Fact]
+    public async Task User_can_sort_transactions_by_amount()
+    {
+        await using var factory = new FinanceTrackerFactory();
+        var client = factory.CreateClient();
+        var token = await RegisterAndGetTokenAsync(client, "transaction-sort@example.com");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var account = await PostAsync<AccountResponse>(client, "/api/accounts", new AccountRequest("Cash", "Wallet", 0));
+        var category = await PostAsync<CategoryResponse>(client, "/api/categories", new CategoryRequest("Food", TransactionType.Expense));
+        await PostAsync<TransactionResponse>(client, "/api/transactions", new TransactionRequest(account.Id, category.Id, TransactionType.Expense, 30, "Most", new DateOnly(2026, 7, 1)));
+        await PostAsync<TransactionResponse>(client, "/api/transactions", new TransactionRequest(account.Id, category.Id, TransactionType.Expense, 10, "Least", new DateOnly(2026, 7, 2)));
+        await PostAsync<TransactionResponse>(client, "/api/transactions", new TransactionRequest(account.Id, category.Id, TransactionType.Expense, 20, "Middle", new DateOnly(2026, 7, 3)));
+
+        var page = await client.GetFromJsonAsync<PagedResponse<TransactionResponse>>("/api/transactions?sortBy=amount&sortDirection=asc", JsonOptions);
+
+        page.Should().NotBeNull();
+        page!.Items.Select(transaction => transaction.Amount).Should().Equal(10, 20, 30);
+    }
+
+    [Fact]
     public async Task User_can_get_update_and_delete_budget()
     {
         await using var factory = new FinanceTrackerFactory();

@@ -303,11 +303,18 @@ api.MapDelete("/categories/{id:guid}", async (Guid id, ClaimsPrincipal principal
     return Results.NoContent();
 });
 
-api.MapGet("/transactions", async (ClaimsPrincipal principal, AppDbContext db, DateOnly? from, DateOnly? to, Guid? accountId, Guid? categoryId, CancellationToken cancellationToken, int page = 1, int pageSize = 20) =>
+api.MapGet("/transactions", async (ClaimsPrincipal principal, AppDbContext db, DateOnly? from, DateOnly? to, Guid? accountId, Guid? categoryId, CancellationToken cancellationToken, int page = 1, int pageSize = 20, string sortBy = "occurredOn", string sortDirection = "desc") =>
 {
     if (page <= 0 || pageSize <= 0 || pageSize > 100)
     {
         return BadRequest("invalid_pagination", "Page must be greater than zero and page size must be between 1 and 100.");
+    }
+
+    var sortByValue = sortBy.Trim().ToLowerInvariant();
+    var sortDirectionValue = sortDirection.Trim().ToLowerInvariant();
+    if (sortByValue is not ("occurredon" or "amount") || sortDirectionValue is not ("asc" or "desc"))
+    {
+        return BadRequest("invalid_sort", "Sort by must be occurredOn or amount, and sort direction must be asc or desc.");
     }
 
     var userId = principal.GetUserId();
@@ -319,9 +326,15 @@ api.MapGet("/transactions", async (ClaimsPrincipal principal, AppDbContext db, D
 
     var totalCount = await query.CountAsync(cancellationToken);
     var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
-    var transactions = await query
-        .OrderByDescending(transaction => transaction.OccurredOn)
-        .ThenByDescending(transaction => transaction.Id)
+    var orderedQuery = (sortByValue, sortDirectionValue) switch
+    {
+        ("amount", "asc") => query.OrderBy(transaction => transaction.Amount).ThenByDescending(transaction => transaction.Id),
+        ("amount", "desc") => query.OrderByDescending(transaction => transaction.Amount).ThenByDescending(transaction => transaction.Id),
+        ("occurredon", "asc") => query.OrderBy(transaction => transaction.OccurredOn).ThenByDescending(transaction => transaction.Id),
+        _ => query.OrderByDescending(transaction => transaction.OccurredOn).ThenByDescending(transaction => transaction.Id)
+    };
+
+    var transactions = await orderedQuery
         .Skip((page - 1) * pageSize)
         .Take(pageSize)
         .Select(transaction => new TransactionResponse(transaction.Id, transaction.AccountId, transaction.CategoryId, transaction.Type, transaction.Amount, transaction.Note, transaction.OccurredOn))

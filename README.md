@@ -205,6 +205,13 @@ GET /api/transactions?page=1&pageSize=20
 Authorization: Bearer <token>
 ```
 
+Query transactions with sorting:
+
+```http
+GET /api/transactions?sortBy=amount&sortDirection=desc
+Authorization: Bearer <token>
+```
+
 查询月度报表：
 
 ```http
