@@ -34,6 +34,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.AddSingleton<PasswordHasher>();
 builder.Services.AddSingleton<JwtTokenService>();
+builder.Services.AddScoped<TransactionService>();
 builder.Services.AddScoped<ReportService>();
 builder.Services.AddScoped<DevelopmentDataSeeder>();
 
@@ -303,7 +304,7 @@ api.MapDelete("/categories/{id:guid}", async (Guid id, ClaimsPrincipal principal
     return Results.NoContent();
 });
 
-api.MapGet("/transactions", async (ClaimsPrincipal principal, AppDbContext db, DateOnly? from, DateOnly? to, Guid? accountId, Guid? categoryId, string? keyword, decimal? minAmount, decimal? maxAmount, CancellationToken cancellationToken, int page = 1, int pageSize = 20, string sortBy = "occurredOn", string sortDirection = "desc") =>
+api.MapGet("/transactions", async (ClaimsPrincipal principal, TransactionService transactionService, DateOnly? from, DateOnly? to, Guid? accountId, Guid? categoryId, string? keyword, decimal? minAmount, decimal? maxAmount, CancellationToken cancellationToken, int page = 1, int pageSize = 20, string sortBy = "occurredOn", string sortDirection = "desc") =>
 {
     if (page <= 0 || pageSize <= 0 || pageSize > 100)
     {
@@ -323,18 +324,22 @@ api.MapGet("/transactions", async (ClaimsPrincipal principal, AppDbContext db, D
     }
 
     var userId = principal.GetUserId();
-    var query = ApplyTransactionFilters(db.Transactions, userId, from, to, accountId, categoryId, keyword, minAmount, maxAmount);
+    var transactions = await transactionService.GetTransactionsAsync(
+        userId,
+        from,
+        to,
+        accountId,
+        categoryId,
+        keyword,
+        minAmount,
+        maxAmount,
+        page,
+        pageSize,
+        sortByValue,
+        sortDirectionValue,
+        cancellationToken);
 
-    var totalCount = await query.CountAsync(cancellationToken);
-    var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
-    var orderedQuery = ApplyTransactionSorting(query, sortByValue, sortDirectionValue);
-
-    var transactions = await orderedQuery
-        .Skip((page - 1) * pageSize)
-        .Take(pageSize)
-        .Select(transaction => new TransactionResponse(transaction.Id, transaction.AccountId, transaction.CategoryId, transaction.Type, transaction.Amount, transaction.Note, transaction.OccurredOn))
-        .ToListAsync(cancellationToken);
-    return Results.Ok(new PagedResponse<TransactionResponse>(transactions, page, pageSize, totalCount, totalPages));
+    return Results.Ok(transactions);
 });
 
 api.MapGet("/transactions/{id:guid}", async (Guid id, ClaimsPrincipal principal, AppDbContext db, CancellationToken cancellationToken) =>
@@ -507,42 +512,6 @@ api.MapGet("/reports/monthly", async (ClaimsPrincipal principal, ReportService r
 });
 
 app.Run();
-
-static IQueryable<Transaction> ApplyTransactionFilters(
-    IQueryable<Transaction> query,
-    Guid userId,
-    DateOnly? from,
-    DateOnly? to,
-    Guid? accountId,
-    Guid? categoryId,
-    string? keyword,
-    decimal? minAmount,
-    decimal? maxAmount)
-{
-    query = query.Where(transaction => transaction.UserId == userId);
-    if (from is not null) query = query.Where(transaction => transaction.OccurredOn >= from.Value);
-    if (to is not null) query = query.Where(transaction => transaction.OccurredOn <= to.Value);
-    if (accountId is not null) query = query.Where(transaction => transaction.AccountId == accountId.Value);
-    if (categoryId is not null) query = query.Where(transaction => transaction.CategoryId == categoryId.Value);
-    if (minAmount is not null) query = query.Where(transaction => transaction.Amount >= minAmount.Value);
-    if (maxAmount is not null) query = query.Where(transaction => transaction.Amount <= maxAmount.Value);
-    if (!string.IsNullOrWhiteSpace(keyword))
-    {
-        var keywordValue = keyword.Trim();
-        query = query.Where(transaction => transaction.Note != null && transaction.Note.Contains(keywordValue));
-    }
-
-    return query;
-}
-
-static IOrderedQueryable<Transaction> ApplyTransactionSorting(IQueryable<Transaction> query, string sortByValue, string sortDirectionValue) =>
-    (sortByValue, sortDirectionValue) switch
-    {
-        ("amount", "asc") => query.OrderBy(transaction => transaction.Amount).ThenByDescending(transaction => transaction.Id),
-        ("amount", "desc") => query.OrderByDescending(transaction => transaction.Amount).ThenByDescending(transaction => transaction.Id),
-        ("occurredon", "asc") => query.OrderBy(transaction => transaction.OccurredOn).ThenByDescending(transaction => transaction.Id),
-        _ => query.OrderByDescending(transaction => transaction.OccurredOn).ThenByDescending(transaction => transaction.Id)
-    };
 
 static async Task<IResult?> ValidateTransactionRequestAsync(TransactionRequest request, Guid userId, AppDbContext db, CancellationToken cancellationToken)
 {
