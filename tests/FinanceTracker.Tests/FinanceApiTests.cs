@@ -280,6 +280,28 @@ public sealed class FinanceApiTests
     }
 
     [Fact]
+    public async Task User_can_filter_transactions_by_amount_range()
+    {
+        await using var factory = new FinanceTrackerFactory();
+        var client = factory.CreateClient();
+        var token = await RegisterAndGetTokenAsync(client, "transaction-amount-range@example.com");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var account = await PostAsync<AccountResponse>(client, "/api/accounts", new AccountRequest("Cash", "Wallet", 0));
+        var category = await PostAsync<CategoryResponse>(client, "/api/categories", new CategoryRequest("Food", TransactionType.Expense));
+        await PostAsync<TransactionResponse>(client, "/api/transactions", new TransactionRequest(account.Id, category.Id, TransactionType.Expense, 5, "Small", new DateOnly(2026, 7, 1)));
+        await PostAsync<TransactionResponse>(client, "/api/transactions", new TransactionRequest(account.Id, category.Id, TransactionType.Expense, 15, "Middle", new DateOnly(2026, 7, 2)));
+        await PostAsync<TransactionResponse>(client, "/api/transactions", new TransactionRequest(account.Id, category.Id, TransactionType.Expense, 30, "Large", new DateOnly(2026, 7, 3)));
+
+        var page = await client.GetFromJsonAsync<PagedResponse<TransactionResponse>>("/api/transactions?minAmount=10&maxAmount=20&sortBy=amount&sortDirection=asc", JsonOptions);
+
+        page.Should().NotBeNull();
+        page!.TotalCount.Should().Be(1);
+        page.Items.Should().ContainSingle();
+        page.Items[0].Note.Should().Be("Middle");
+    }
+
+    [Fact]
     public async Task User_can_get_update_and_delete_budget()
     {
         await using var factory = new FinanceTrackerFactory();

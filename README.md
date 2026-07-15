@@ -219,6 +219,13 @@ GET /api/transactions?keyword=Lunch
 Authorization: Bearer <token>
 ```
 
+Filter transactions by amount range:
+
+```http
+GET /api/transactions?minAmount=10&maxAmount=100
+Authorization: Bearer <token>
+```
+
 查询月度报表：
 
 ```http

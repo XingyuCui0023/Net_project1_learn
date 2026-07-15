@@ -303,7 +303,7 @@ api.MapDelete("/categories/{id:guid}", async (Guid id, ClaimsPrincipal principal
     return Results.NoContent();
 });
 
-api.MapGet("/transactions", async (ClaimsPrincipal principal, AppDbContext db, DateOnly? from, DateOnly? to, Guid? accountId, Guid? categoryId, string? keyword, CancellationToken cancellationToken, int page = 1, int pageSize = 20, string sortBy = "occurredOn", string sortDirection = "desc") =>
+api.MapGet("/transactions", async (ClaimsPrincipal principal, AppDbContext db, DateOnly? from, DateOnly? to, Guid? accountId, Guid? categoryId, string? keyword, decimal? minAmount, decimal? maxAmount, CancellationToken cancellationToken, int page = 1, int pageSize = 20, string sortBy = "occurredOn", string sortDirection = "desc") =>
 {
     if (page <= 0 || pageSize <= 0 || pageSize > 100)
     {
@@ -317,8 +317,13 @@ api.MapGet("/transactions", async (ClaimsPrincipal principal, AppDbContext db, D
         return BadRequest("invalid_sort", "Sort by must be occurredOn or amount, and sort direction must be asc or desc.");
     }
 
+    if (minAmount is < 0 || maxAmount is < 0 || (minAmount is not null && maxAmount is not null && minAmount > maxAmount))
+    {
+        return BadRequest("invalid_amount_range", "Amount range must be valid and cannot be negative.");
+    }
+
     var userId = principal.GetUserId();
-    var query = ApplyTransactionFilters(db.Transactions, userId, from, to, accountId, categoryId, keyword);
+    var query = ApplyTransactionFilters(db.Transactions, userId, from, to, accountId, categoryId, keyword, minAmount, maxAmount);
 
     var totalCount = await query.CountAsync(cancellationToken);
     var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
@@ -510,13 +515,17 @@ static IQueryable<Transaction> ApplyTransactionFilters(
     DateOnly? to,
     Guid? accountId,
     Guid? categoryId,
-    string? keyword)
+    string? keyword,
+    decimal? minAmount,
+    decimal? maxAmount)
 {
     query = query.Where(transaction => transaction.UserId == userId);
     if (from is not null) query = query.Where(transaction => transaction.OccurredOn >= from.Value);
     if (to is not null) query = query.Where(transaction => transaction.OccurredOn <= to.Value);
     if (accountId is not null) query = query.Where(transaction => transaction.AccountId == accountId.Value);
     if (categoryId is not null) query = query.Where(transaction => transaction.CategoryId == categoryId.Value);
+    if (minAmount is not null) query = query.Where(transaction => transaction.Amount >= minAmount.Value);
+    if (maxAmount is not null) query = query.Where(transaction => transaction.Amount <= maxAmount.Value);
     if (!string.IsNullOrWhiteSpace(keyword))
     {
         var keywordValue = keyword.Trim();
