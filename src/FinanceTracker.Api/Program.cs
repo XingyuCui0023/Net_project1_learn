@@ -303,7 +303,7 @@ api.MapDelete("/categories/{id:guid}", async (Guid id, ClaimsPrincipal principal
     return Results.NoContent();
 });
 
-api.MapGet("/transactions", async (ClaimsPrincipal principal, AppDbContext db, DateOnly? from, DateOnly? to, Guid? accountId, Guid? categoryId, CancellationToken cancellationToken, int page = 1, int pageSize = 20, string sortBy = "occurredOn", string sortDirection = "desc") =>
+api.MapGet("/transactions", async (ClaimsPrincipal principal, AppDbContext db, DateOnly? from, DateOnly? to, Guid? accountId, Guid? categoryId, string? keyword, CancellationToken cancellationToken, int page = 1, int pageSize = 20, string sortBy = "occurredOn", string sortDirection = "desc") =>
 {
     if (page <= 0 || pageSize <= 0 || pageSize > 100)
     {
@@ -323,6 +323,11 @@ api.MapGet("/transactions", async (ClaimsPrincipal principal, AppDbContext db, D
     if (to is not null) query = query.Where(transaction => transaction.OccurredOn <= to.Value);
     if (accountId is not null) query = query.Where(transaction => transaction.AccountId == accountId.Value);
     if (categoryId is not null) query = query.Where(transaction => transaction.CategoryId == categoryId.Value);
+    if (!string.IsNullOrWhiteSpace(keyword))
+    {
+        var keywordValue = keyword.Trim();
+        query = query.Where(transaction => transaction.Note != null && transaction.Note.Contains(keywordValue));
+    }
 
     var totalCount = await query.CountAsync(cancellationToken);
     var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);

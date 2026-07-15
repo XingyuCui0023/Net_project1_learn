@@ -212,6 +212,13 @@ GET /api/transactions?sortBy=amount&sortDirection=desc
 Authorization: Bearer <token>
 ```
 
+Search transactions by note keyword:
+
+```http
+GET /api/transactions?keyword=Lunch
+Authorization: Bearer <token>
+```
+
 查询月度报表：
 
 ```http

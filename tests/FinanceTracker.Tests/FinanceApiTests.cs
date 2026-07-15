@@ -259,6 +259,27 @@ public sealed class FinanceApiTests
     }
 
     [Fact]
+    public async Task User_can_search_transactions_by_note_keyword()
+    {
+        await using var factory = new FinanceTrackerFactory();
+        var client = factory.CreateClient();
+        var token = await RegisterAndGetTokenAsync(client, "transaction-search@example.com");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var account = await PostAsync<AccountResponse>(client, "/api/accounts", new AccountRequest("Cash", "Wallet", 0));
+        var category = await PostAsync<CategoryResponse>(client, "/api/categories", new CategoryRequest("Food", TransactionType.Expense));
+        await PostAsync<TransactionResponse>(client, "/api/transactions", new TransactionRequest(account.Id, category.Id, TransactionType.Expense, 12, "Lunch noodles", new DateOnly(2026, 7, 1)));
+        await PostAsync<TransactionResponse>(client, "/api/transactions", new TransactionRequest(account.Id, category.Id, TransactionType.Expense, 8, "Coffee", new DateOnly(2026, 7, 2)));
+        await PostAsync<TransactionResponse>(client, "/api/transactions", new TransactionRequest(account.Id, category.Id, TransactionType.Expense, 18, "Lunch salad", new DateOnly(2026, 7, 3)));
+
+        var page = await client.GetFromJsonAsync<PagedResponse<TransactionResponse>>("/api/transactions?keyword=Lunch&sortBy=amount&sortDirection=asc", JsonOptions);
+
+        page.Should().NotBeNull();
+        page!.TotalCount.Should().Be(2);
+        page.Items.Select(transaction => transaction.Note).Should().Equal("Lunch noodles", "Lunch salad");
+    }
+
+    [Fact]
     public async Task User_can_get_update_and_delete_budget()
     {
         await using var factory = new FinanceTrackerFactory();
