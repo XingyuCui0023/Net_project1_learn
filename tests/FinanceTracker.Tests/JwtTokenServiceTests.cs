@@ -1,9 +1,11 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Text;
 using FinanceTracker.Api.Models;
 using FinanceTracker.Api.Services;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
+using Microsoft.IdentityModel.Tokens;
 
 namespace FinanceTracker.Tests;
 
@@ -30,6 +32,27 @@ public sealed class JwtTokenServiceTests
         jwt.ValidTo.Should().BeAfter(DateTime.UtcNow.AddHours(7));
     }
 
+    [Fact]
+    public void CreateToken_generates_token_that_passes_signature_validation()
+    {
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "jwt-validate@example.com",
+            PasswordHash = "hash"
+        };
+        var configuration = CreateConfiguration();
+        var service = new JwtTokenService(configuration);
+        var validationParameters = CreateValidationParameters(configuration);
+
+        var token = service.CreateToken(user);
+
+        var principal = new JwtSecurityTokenHandler().ValidateToken(token, validationParameters, out var validatedToken);
+        validatedToken.Should().BeOfType<JwtSecurityToken>();
+        principal.FindFirstValue(ClaimTypes.NameIdentifier).Should().Be(user.Id.ToString());
+        principal.FindFirstValue(ClaimTypes.Email).Should().Be(user.Email);
+    }
+
     private static IConfiguration CreateConfiguration() =>
         new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -38,4 +61,16 @@ public sealed class JwtTokenServiceTests
                 ["Jwt:Issuer"] = "FinanceTracker.Tests"
             })
             .Build();
+
+    private static TokenValidationParameters CreateValidationParameters(IConfiguration configuration) =>
+        new()
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = configuration["Jwt:Issuer"],
+            ValidAudience = configuration["Jwt:Issuer"],
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration["Jwt:Key"]!))
+        };
 }
