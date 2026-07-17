@@ -306,21 +306,9 @@ api.MapDelete("/categories/{id:guid}", async (Guid id, ClaimsPrincipal principal
 
 api.MapGet("/transactions", async (ClaimsPrincipal principal, TransactionService transactionService, [AsParameters] TransactionQueryParameters query, CancellationToken cancellationToken) =>
 {
-    if (query.Page <= 0 || query.PageSize <= 0 || query.PageSize > 100)
+    if (query.Validate() is { } validation)
     {
-        return BadRequest("invalid_pagination", "Page must be greater than zero and page size must be between 1 and 100.");
-    }
-
-    var sortByValue = query.SortBy.Trim().ToLowerInvariant();
-    var sortDirectionValue = query.SortDirection.Trim().ToLowerInvariant();
-    if (sortByValue is not ("occurredon" or "amount") || sortDirectionValue is not ("asc" or "desc"))
-    {
-        return BadRequest("invalid_sort", "Sort by must be occurredOn or amount, and sort direction must be asc or desc.");
-    }
-
-    if (query.MinAmount is < 0 || query.MaxAmount is < 0 || (query.MinAmount is not null && query.MaxAmount is not null && query.MinAmount > query.MaxAmount))
-    {
-        return BadRequest("invalid_amount_range", "Amount range must be valid and cannot be negative.");
+        return BadRequest(validation.Code, validation.Message);
     }
 
     var userId = principal.GetUserId();
@@ -335,8 +323,8 @@ api.MapGet("/transactions", async (ClaimsPrincipal principal, TransactionService
         query.MaxAmount,
         query.Page,
         query.PageSize,
-        sortByValue,
-        sortDirectionValue,
+        query.NormalizedSortBy,
+        query.NormalizedSortDirection,
         cancellationToken);
 
     return Results.Ok(transactions);
