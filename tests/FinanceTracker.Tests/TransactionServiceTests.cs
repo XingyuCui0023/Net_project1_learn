@@ -32,7 +32,7 @@ public sealed class TransactionServiceTests
             to: null,
             accountId,
             categoryId,
-            keyword: "Lunch",
+            keyword: "lunch",
             minAmount: 10,
             maxAmount: 30,
             page: 1,

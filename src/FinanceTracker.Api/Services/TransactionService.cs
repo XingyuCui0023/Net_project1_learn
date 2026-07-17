@@ -62,8 +62,8 @@ public sealed class TransactionService(AppDbContext db)
         if (maxAmount is not null) query = query.Where(transaction => transaction.Amount <= maxAmount.Value);
         if (!string.IsNullOrWhiteSpace(keyword))
         {
-            var keywordValue = keyword.Trim();
-            query = query.Where(transaction => transaction.Note != null && transaction.Note.Contains(keywordValue));
+            var keywordValue = keyword.Trim().ToLowerInvariant();
+            query = query.Where(transaction => transaction.Note != null && transaction.Note.ToLower().Contains(keywordValue));
         }
 
         return query;

@@ -215,7 +215,7 @@ Authorization: Bearer <token>
 Search transactions by note keyword:
 
 ```http
-GET /api/transactions?keyword=Lunch
+GET /api/transactions?keyword=lunch
 Authorization: Bearer <token>
 ```
 

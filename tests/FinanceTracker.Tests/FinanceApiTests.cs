@@ -272,7 +272,7 @@ public sealed class FinanceApiTests
         await PostAsync<TransactionResponse>(client, "/api/transactions", new TransactionRequest(account.Id, category.Id, TransactionType.Expense, 8, "Coffee", new DateOnly(2026, 7, 2)));
         await PostAsync<TransactionResponse>(client, "/api/transactions", new TransactionRequest(account.Id, category.Id, TransactionType.Expense, 18, "Lunch salad", new DateOnly(2026, 7, 3)));
 
-        var page = await client.GetFromJsonAsync<PagedResponse<TransactionResponse>>("/api/transactions?keyword=Lunch&sortBy=amount&sortDirection=asc", JsonOptions);
+        var page = await client.GetFromJsonAsync<PagedResponse<TransactionResponse>>("/api/transactions?keyword=lunch&sortBy=amount&sortDirection=asc", JsonOptions);
 
         page.Should().NotBeNull();
         page!.TotalCount.Should().Be(2);
