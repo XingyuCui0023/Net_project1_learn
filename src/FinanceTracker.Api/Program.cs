@@ -304,21 +304,21 @@ api.MapDelete("/categories/{id:guid}", async (Guid id, ClaimsPrincipal principal
     return Results.NoContent();
 });
 
-api.MapGet("/transactions", async (ClaimsPrincipal principal, TransactionService transactionService, DateOnly? from, DateOnly? to, Guid? accountId, Guid? categoryId, string? keyword, decimal? minAmount, decimal? maxAmount, CancellationToken cancellationToken, int page = 1, int pageSize = 20, string sortBy = "occurredOn", string sortDirection = "desc") =>
+api.MapGet("/transactions", async (ClaimsPrincipal principal, TransactionService transactionService, [AsParameters] TransactionQueryParameters query, CancellationToken cancellationToken) =>
 {
-    if (page <= 0 || pageSize <= 0 || pageSize > 100)
+    if (query.Page <= 0 || query.PageSize <= 0 || query.PageSize > 100)
     {
         return BadRequest("invalid_pagination", "Page must be greater than zero and page size must be between 1 and 100.");
     }
 
-    var sortByValue = sortBy.Trim().ToLowerInvariant();
-    var sortDirectionValue = sortDirection.Trim().ToLowerInvariant();
+    var sortByValue = query.SortBy.Trim().ToLowerInvariant();
+    var sortDirectionValue = query.SortDirection.Trim().ToLowerInvariant();
     if (sortByValue is not ("occurredon" or "amount") || sortDirectionValue is not ("asc" or "desc"))
     {
         return BadRequest("invalid_sort", "Sort by must be occurredOn or amount, and sort direction must be asc or desc.");
     }
 
-    if (minAmount is < 0 || maxAmount is < 0 || (minAmount is not null && maxAmount is not null && minAmount > maxAmount))
+    if (query.MinAmount is < 0 || query.MaxAmount is < 0 || (query.MinAmount is not null && query.MaxAmount is not null && query.MinAmount > query.MaxAmount))
     {
         return BadRequest("invalid_amount_range", "Amount range must be valid and cannot be negative.");
     }
@@ -326,15 +326,15 @@ api.MapGet("/transactions", async (ClaimsPrincipal principal, TransactionService
     var userId = principal.GetUserId();
     var transactions = await transactionService.GetTransactionsAsync(
         userId,
-        from,
-        to,
-        accountId,
-        categoryId,
-        keyword,
-        minAmount,
-        maxAmount,
-        page,
-        pageSize,
+        query.From,
+        query.To,
+        query.AccountId,
+        query.CategoryId,
+        query.Keyword,
+        query.MinAmount,
+        query.MaxAmount,
+        query.Page,
+        query.PageSize,
         sortByValue,
         sortDirectionValue,
         cancellationToken);
