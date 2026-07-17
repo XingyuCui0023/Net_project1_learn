@@ -1,4 +1,5 @@
 using FinanceTracker.Api.Data;
+using FinanceTracker.Api.Dtos;
 using FinanceTracker.Api.Models;
 using FinanceTracker.Api.Services;
 using FluentAssertions;
@@ -37,8 +38,8 @@ public sealed class TransactionServiceTests
             maxAmount: 30,
             page: 1,
             pageSize: 2,
-            sortByValue: "amount",
-            sortDirectionValue: "desc",
+            sortByValue: TransactionSortOptions.Amount,
+            sortDirectionValue: TransactionSortOptions.Descending,
             CancellationToken.None);
 
         result.TotalCount.Should().Be(2);

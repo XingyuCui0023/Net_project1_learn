@@ -28,8 +28,8 @@ public sealed record TransactionQueryParameters(
     decimal? MaxAmount,
     int Page = 1,
     int PageSize = 20,
-    string SortBy = "occurredOn",
-    string SortDirection = "desc")
+    string SortBy = TransactionSortOptions.DefaultSortBy,
+    string SortDirection = TransactionSortOptions.DefaultSortDirection)
 {
     public string NormalizedSortBy => SortBy.Trim().ToLowerInvariant();
     public string NormalizedSortDirection => SortDirection.Trim().ToLowerInvariant();
@@ -41,7 +41,7 @@ public sealed record TransactionQueryParameters(
             return new ValidationError("invalid_pagination", "Page must be greater than zero and page size must be between 1 and 100.");
         }
 
-        if (NormalizedSortBy is not ("occurredon" or "amount") || NormalizedSortDirection is not ("asc" or "desc"))
+        if (!TransactionSortOptions.IsValidSortBy(NormalizedSortBy) || !TransactionSortOptions.IsValidSortDirection(NormalizedSortDirection))
         {
             return new ValidationError("invalid_sort", "Sort by must be occurredOn or amount, and sort direction must be asc or desc.");
         }

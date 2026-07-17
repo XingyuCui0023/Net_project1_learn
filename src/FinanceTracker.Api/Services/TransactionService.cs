@@ -72,9 +72,9 @@ public sealed class TransactionService(AppDbContext db)
     private static IOrderedQueryable<Transaction> ApplySorting(IQueryable<Transaction> query, string sortByValue, string sortDirectionValue) =>
         (sortByValue, sortDirectionValue) switch
         {
-            ("amount", "asc") => query.OrderBy(transaction => transaction.Amount).ThenByDescending(transaction => transaction.Id),
-            ("amount", "desc") => query.OrderByDescending(transaction => transaction.Amount).ThenByDescending(transaction => transaction.Id),
-            ("occurredon", "asc") => query.OrderBy(transaction => transaction.OccurredOn).ThenByDescending(transaction => transaction.Id),
+            (TransactionSortOptions.Amount, TransactionSortOptions.Ascending) => query.OrderBy(transaction => transaction.Amount).ThenByDescending(transaction => transaction.Id),
+            (TransactionSortOptions.Amount, TransactionSortOptions.Descending) => query.OrderByDescending(transaction => transaction.Amount).ThenByDescending(transaction => transaction.Id),
+            (TransactionSortOptions.OccurredOn, TransactionSortOptions.Ascending) => query.OrderBy(transaction => transaction.OccurredOn).ThenByDescending(transaction => transaction.Id),
             _ => query.OrderByDescending(transaction => transaction.OccurredOn).ThenByDescending(transaction => transaction.Id)
         };
 }
